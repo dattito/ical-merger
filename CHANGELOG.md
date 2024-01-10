@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/dattito/ical-merger/compare/v1.0.0...v1.1.0) (2024-01-10)
+
+
+### Features
+
+* add caching for 15min ([82ca3ff](https://github.com/dattito/ical-merger/commit/82ca3ff6c679fa5a35f58abbb421b40f18654380))
+
 ## [1.0.0](https://github.com/dattito/ical-merger/compare/v0.1.0...v1.0.0) (2024-01-10)
 
 
