@@ -14,3 +14,4 @@ thiserror = "1.0.56"
 envy = "0.4.2"
 serde = { version = "1.0.195", features = ["derive"] }
 axum = "0.7.3"
+cached = { version = "0.47.0", features = ["async"] }
