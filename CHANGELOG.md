@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/dattito/ical-merger/compare/v1.1.0...v1.2.0) (2024-01-12)
+
+
+### Features
+
+* add option to shift timezones of single calendars ([#4](https://github.com/dattito/ical-merger/issues/4)) ([6105f85](https://github.com/dattito/ical-merger/commit/6105f8589526c03026b0a59b5f0a2da36063cdf7))
+
 ## [1.1.0](https://github.com/dattito/ical-merger/compare/v1.0.0...v1.1.0) (2024-01-10)
 
 
