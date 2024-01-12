@@ -10,9 +10,9 @@ FROM chef as builder
 COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
-RUN cargo build --release
+RUN cargo build --release --bin http
 
 FROM scratch AS runtime 
-COPY --from=builder /app/target/*-unknown-linux-musl/release/ical-merger /app
+COPY --from=builder /app/target/*-unknown-linux-musl/release/http /app
 EXPOSE 3000
 ENTRYPOINT ["/app"]
