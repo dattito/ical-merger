@@ -3,10 +3,10 @@ use axum::routing::get;
 use axum::Router;
 use cached::proc_macro::once;
 
-use crate::config::Config;
-use crate::{
+use crate::lib::{
+    calendar::{hide_details, urls_to_merged_calendar},
+    config::Config,
     error::{Error, Result},
-    merger::urls_to_merged_calendar,
 };
 
 pub async fn start_server(config: Config) -> Result<()> {
@@ -22,8 +22,13 @@ pub async fn start_server(config: Config) -> Result<()> {
     axum::serve(listener, app).await.map_err(Error::IO)
 }
 
-#[once(time=900, result=true, sync_writes=true)]
+#[once(time = 900, result = true, sync_writes = true)]
 async fn handler(State(config): State<Config>) -> Result<String> {
-      // cached_calendar(config.urls).await
-    Ok(urls_to_merged_calendar(config.urls).await?.to_string())
+    // cached_calendar(config.urls).await
+    let c = urls_to_merged_calendar(config.urls, &config.tz_offsets).await?;
+
+    match config.hide_details {
+        true => Ok(hide_details(c).to_string()),
+        false => Ok(c.to_string()),
+    }
 }
