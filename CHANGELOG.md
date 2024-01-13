@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/dattito/ical-merger/compare/v1.2.0...v1.2.1) (2024-01-13)
+
+
+### Bug Fixes
+
+* **dummy:** test gh action ([f1e70a0](https://github.com/dattito/ical-merger/commit/f1e70a0c19e6ab9257812bd7d6135705d8dbd46b))
+
 ## [1.2.0](https://github.com/dattito/ical-merger/compare/v1.1.0...v1.2.0) (2024-01-12)
 
 
