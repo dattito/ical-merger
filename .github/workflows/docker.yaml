@@ -37,7 +37,7 @@ jobs:
         uses: docker/metadata-action@v3
         with:
           images: |
-            ghcr.io/dattito/ical-merger
+            ghcr.io/${{ github.repository }}
           tags: |
             type=schedule
             type=ref,event=branch
