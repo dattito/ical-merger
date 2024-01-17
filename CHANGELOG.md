@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/dattito/ical-merger/compare/v1.2.1...v1.3.0) (2024-01-17)
+
+
+### Features
+
+* add reccurance to events when hiding details ([b20c6a5](https://github.com/dattito/ical-merger/commit/b20c6a51aeb0b0fb5df28d165badc38a3d959c6e))
+
 ## [1.2.1](https://github.com/dattito/ical-merger/compare/v1.2.0...v1.2.1) (2024-01-13)
 
 
