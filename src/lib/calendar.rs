@@ -1,6 +1,9 @@
 use chrono::Duration;
 use futures::future::join_all;
-use icalendar::{parser::read_calendar, Calendar, CalendarComponent, Component, Event, EventLike, DatePerhapsTime, CalendarDateTime};
+use icalendar::{
+    parser::read_calendar, Calendar, CalendarComponent, CalendarDateTime, Component,
+    DatePerhapsTime, Event, EventLike,
+};
 
 use crate::lib::error::{Error, Result};
 
@@ -26,23 +29,17 @@ async fn url_to_components(url: String) -> Result<Vec<CalendarComponent>> {
 }
 
 pub async fn urls_to_merged_calendar(urls: Vec<String>, offsets: &Vec<i64>) -> Result<Calendar> {
-    let calendars = urls
-        .into_iter()
-        .enumerate()
-        .map(|(index,url)| async move {
-           let components = url_to_components(url).await?;
+    let calendars = urls.into_iter().enumerate().map(|(index, url)| async move {
+        let components = url_to_components(url).await?;
 
-            if offsets.is_empty() {
-                println!("test");
-                Ok(components)
-            } else if index >= offsets.len() {
-                println!("xx{offsets:?}");
-                Ok(shift_timezone(components, *offsets.last().unwrap()).components)
-            } else {
-                println!("=={offsets:?}");
-                Ok(shift_timezone(components, *offsets.get(index).unwrap()).components)
-            }
-        });
+        if offsets.is_empty() {
+            Ok(components)
+        } else if index >= offsets.len() {
+            Ok(shift_timezone(components, *offsets.last().unwrap()).components)
+        } else {
+            Ok(shift_timezone(components, *offsets.get(index).unwrap()).components)
+        }
+    });
 
     let calendar = join_all(calendars)
         .await
@@ -56,7 +53,10 @@ pub async fn urls_to_merged_calendar(urls: Vec<String>, offsets: &Vec<i64>) -> R
 }
 
 pub async fn calendars_to_merged_calendar(calendars: Vec<Calendar>) -> Calendar {
-    calendars.into_iter().flat_map(|c|c.components).collect::<Calendar>()
+    calendars
+        .into_iter()
+        .flat_map(|c| c.components)
+        .collect::<Calendar>()
 }
 
 pub fn hide_details(calendar: Calendar) -> Calendar {
@@ -83,6 +83,10 @@ pub fn hide_details(calendar: Calendar) -> Calendar {
                     new_event.uid(uid);
                 }
 
+                if let Some(rrule) = event.property_value("RRULE") {
+                    new_event.add_property("RRULE", rrule);
+                }
+
                 new_event.summary(match event.get_status() {
                     Some(status) => match status {
                         icalendar::EventStatus::Confirmed => "Blocked",
@@ -101,40 +105,48 @@ pub fn hide_details(calendar: Calendar) -> Calendar {
 }
 
 pub fn shift_timezone(components: Vec<CalendarComponent>, offset: i64) -> Calendar {
-    components.into_iter().map(|component| {
-        if let Some(event) = component.as_event() {
-            let mut new_event = event.clone();
+    components
+        .into_iter()
+        .map(|component| {
+            if let Some(event) = component.as_event() {
+                let mut new_event = event.clone();
 
-            if let Some(starts) = event.get_start() {
-                new_event.starts(shift_date_pehaps_time(starts, offset));
+                if let Some(starts) = event.get_start() {
+                    new_event.starts(shift_date_pehaps_time(starts, offset));
+                }
+
+                if let Some(ends) = event.get_end() {
+                    new_event.ends(shift_date_pehaps_time(ends, offset));
+                }
+
+                CalendarComponent::Event(new_event)
+            } else {
+                component
             }
-
-            if let Some(ends) = event.get_end() {
-                new_event.ends(shift_date_pehaps_time(ends, offset));
-            }
-
-            CalendarComponent::Event(new_event)
-
-        } else {
-            component
-        }
-    }).collect::<Calendar>()
+        })
+        .collect::<Calendar>()
 }
 
 fn shift_date_pehaps_time(dpt: DatePerhapsTime, offset: i64) -> DatePerhapsTime {
-
-    if offset != 0 {
-        println!("{offset}");
+    if offset == 0 {
+        return dpt
     }
 
     match dpt {
-        DatePerhapsTime::DateTime(dt) =>{
-            match dt {
-                CalendarDateTime::Floating(f) =>DatePerhapsTime::DateTime(CalendarDateTime::Floating(f + Duration::hours(offset))),
-                CalendarDateTime::Utc(t) =>DatePerhapsTime::DateTime(CalendarDateTime::Utc(t + Duration::hours(offset))),
-                CalendarDateTime::WithTimezone { date_time, tzid } =>DatePerhapsTime::DateTime(CalendarDateTime::WithTimezone { date_time: date_time + Duration::hours(offset), tzid })
+        DatePerhapsTime::DateTime(dt) => match dt {
+            CalendarDateTime::Floating(f) => {
+                DatePerhapsTime::DateTime(CalendarDateTime::Floating(f + Duration::hours(offset)))
+            }
+            CalendarDateTime::Utc(t) => {
+                DatePerhapsTime::DateTime(CalendarDateTime::Utc(t + Duration::hours(offset)))
+            }
+            CalendarDateTime::WithTimezone { date_time, tzid } => {
+                DatePerhapsTime::DateTime(CalendarDateTime::WithTimezone {
+                    date_time: date_time + Duration::hours(offset),
+                    tzid,
+                })
             }
         },
-        DatePerhapsTime::Date(d) => DatePerhapsTime::Date(d)
+        DatePerhapsTime::Date(d) => DatePerhapsTime::Date(d),
     }
 }

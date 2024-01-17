@@ -1,4 +1,8 @@
-use ical_merger::lib::{config::Config, error::Result, calendar::{urls_to_merged_calendar, hide_details}};
+use ical_merger::lib::{
+    calendar::{hide_details, urls_to_merged_calendar},
+    config::Config,
+    error::Result,
+};
 
 #[tokio::main]
 async fn main() -> Result<()> {
