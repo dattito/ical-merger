@@ -1,4 +1,4 @@
-use chrono::Duration;
+use chrono::{DateTime, Duration, Utc};
 use futures::future::join_all;
 use icalendar::{
     parser::read_calendar, Calendar, CalendarComponent, CalendarDateTime, Component,
@@ -129,7 +129,7 @@ pub fn shift_timezone(components: Vec<CalendarComponent>, offset: i64) -> Calend
 
 fn shift_date_pehaps_time(dpt: DatePerhapsTime, offset: i64) -> DatePerhapsTime {
     if offset == 0 {
-        return dpt
+        return dpt;
     }
 
     match dpt {
@@ -148,5 +148,83 @@ fn shift_date_pehaps_time(dpt: DatePerhapsTime, offset: i64) -> DatePerhapsTime 
             }
         },
         DatePerhapsTime::Date(d) => DatePerhapsTime::Date(d),
+    }
+}
+
+// makes only sense if hiding details
+pub fn merge_all_overlapping_events(calendar: &mut Calendar) {
+    let mut new_components: Vec<CalendarComponent> = Vec::new();
+
+    calendar.components.iter().for_each(|component_a| {
+        if let CalendarComponent::Event(event_a) = component_a {
+            let overlapped_event_index =
+                new_components
+                    .iter()
+                    .position(|component_b| match component_b {
+                        CalendarComponent::Event(event_b) => {
+                            check_events_overlap(event_a, event_b)
+                        }
+                        _ => false,
+                    });
+
+            match overlapped_event_index {
+                None => new_components.push(CalendarComponent::Event(event_a.clone())),
+                Some(oei) => {
+                    if let CalendarComponent::Event(event_b) = new_components.get_mut(oei).unwrap()
+                    {
+                        merge_events(event_b, event_a);
+                    }
+                }
+            };
+        } else {
+            new_components.push(component_a.clone());
+        };
+    });
+
+    calendar.components = new_components;
+}
+
+fn datetime(dpt: DatePerhapsTime) -> Option<DateTime<Utc>> {
+    match dpt {
+        DatePerhapsTime::Date(_) => None,
+        DatePerhapsTime::DateTime(dt) => match dt {
+            CalendarDateTime::Utc(u) => Some(u),
+            CalendarDateTime::WithTimezone { date_time, .. } => {
+                Some(date_time.and_local_timezone(Utc).unwrap())
+            }
+            CalendarDateTime::Floating(f) => Some(f.and_local_timezone(Utc).unwrap()),
+        },
+    }
+}
+
+fn check_events_overlap(event_a: &Event, event_b: &Event) -> bool {
+    match (
+        event_a.get_start().and_then(datetime),
+        event_a.get_end().and_then(datetime),
+        event_b.get_start().and_then(datetime),
+        event_b.get_end().and_then(datetime),
+    ) {
+        (Some(start_a), Some(end_a), Some(start_b), Some(end_b)) => {
+            (start_b < start_a && start_a <= end_b) || (start_a < start_b && start_b <= end_a)
+        }
+        _ => false,
+    }
+}
+
+// it is assumed that datetime exists for start and end of both events and it is known that the
+// events overlap
+fn merge_events(event_a: &mut Event, event_b: &Event) {
+    let start_a = event_a.get_start().and_then(datetime).unwrap();
+    let end_a = event_a.get_end().and_then(datetime).unwrap();
+
+    let start_b = event_b.get_start().and_then(datetime).unwrap();
+    let end_b = event_b.get_end().and_then(datetime).unwrap();
+
+    if start_b < start_a {
+        event_a.starts(event_b.get_start().unwrap());
+    }
+
+    if end_b > end_a {
+        event_a.ends(event_b.get_end().unwrap());
     }
 }

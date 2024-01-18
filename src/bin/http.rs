@@ -4,5 +4,7 @@ use ical_merger::lib::{config::Config, error::Result, server::start_server};
 async fn main() -> Result<()> {
     let config = envy::from_env::<Config>()?;
 
+    config.validate()?;
+
     start_server(config).await
 }

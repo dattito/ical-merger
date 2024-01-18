@@ -15,6 +15,9 @@ pub enum Error {
 
     #[error("cannot bind tcp port: {0}")]
     IO(#[from] std::io::Error),
+
+    #[error("config ist invalid: {0}")]
+    Config(String),
 }
 
 impl IntoResponse for Error {

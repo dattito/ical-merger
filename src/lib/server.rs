@@ -4,7 +4,7 @@ use axum::Router;
 use cached::proc_macro::once;
 
 use crate::lib::{
-    calendar::{hide_details, urls_to_merged_calendar},
+    calendar::{hide_details, urls_to_merged_calendar, merge_all_overlapping_events},
     config::Config,
     error::{Error, Result},
 };
@@ -25,10 +25,15 @@ pub async fn start_server(config: Config) -> Result<()> {
 #[once(time = 900, result = true, sync_writes = true)]
 async fn handler(State(config): State<Config>) -> Result<String> {
     // cached_calendar(config.urls).await
-    let c = urls_to_merged_calendar(config.urls, &config.tz_offsets).await?;
+    let mut c = urls_to_merged_calendar(config.urls, &config.tz_offsets).await?;
 
-    match config.hide_details {
-        true => Ok(hide_details(c).to_string()),
-        false => Ok(c.to_string()),
+    if config.hide_details {
+        c = hide_details(c);
     }
+
+    if config.merge_overlapping_events {
+        merge_all_overlapping_events(&mut c)
+    }
+
+    Ok(c.to_string())
 }
