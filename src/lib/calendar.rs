@@ -96,7 +96,7 @@ pub fn hide_details(calendar: Calendar) -> Calendar {
                     None => "Blocked",
                 });
 
-                Some(new_event.done())
+                Some(new_event)
             } else {
                 None
             }
@@ -161,9 +161,7 @@ pub fn merge_all_overlapping_events(calendar: &mut Calendar) {
                 new_components
                     .iter()
                     .position(|component_b| match component_b {
-                        CalendarComponent::Event(event_b) => {
-                            check_events_overlap(event_a, event_b)
-                        }
+                        CalendarComponent::Event(event_b) => check_events_overlap(event_a, event_b),
                         _ => false,
                     });
 
@@ -198,17 +196,27 @@ fn datetime(dpt: DatePerhapsTime) -> Option<DateTime<Utc>> {
 }
 
 fn check_events_overlap(event_a: &Event, event_b: &Event) -> bool {
-    match (
-        event_a.get_start().and_then(datetime),
-        event_a.get_end().and_then(datetime),
-        event_b.get_start().and_then(datetime),
-        event_b.get_end().and_then(datetime),
-    ) {
-        (Some(start_a), Some(end_a), Some(start_b), Some(end_b)) => {
-            (start_b < start_a && start_a <= end_b) || (start_a < start_b && start_b <= end_a)
-        }
-        _ => false,
-    }
+    let Some(start_a) = event_a.get_start().and_then(datetime) else {
+        return false;
+    };
+    let Some(end_a) = event_a.get_end().and_then(datetime) else {
+        return false;
+    };
+    let Some(start_b) = event_b.get_start().and_then(datetime) else {
+        return false;
+    };
+    let Some(end_b) = event_b.get_end().and_then(datetime) else {
+        return false;
+    };
+
+    (start_a <= start_b && start_b <= end_a)
+        || (start_b <= start_a && start_a <= end_b)
+        || (start_a <= end_b && end_b <= end_a)
+        || (start_b <= end_a && end_a <= end_b)
+        || ((start_a - start_b).abs() < Duration::minutes(5))
+        || ((start_a - end_b).abs() < Duration::minutes(5))
+        || ((end_b - start_a).abs() < Duration::minutes(5))
+        || ((end_a - end_b).abs() < Duration::minutes(5))
 }
 
 // it is assumed that datetime exists for start and end of both events and it is known that the
@@ -226,5 +234,348 @@ fn merge_events(event_a: &mut Event, event_b: &Event) {
 
     if end_b > end_a {
         event_a.ends(event_b.get_end().unwrap());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::{DateTime, Utc};
+    use icalendar::{Calendar, Event, EventLike};
+
+    // Cases: Important: Event A should end before or at the same time as Event B
+    // 1: Event A starts before Event B starts and ends after Event B starts and ends before Event B ends
+    // 2: Event A starts after Event B starts and ends after Event B ends
+    // 3: Event A starts after Event B starts and ends before Event B ends
+    // 4: Event A starts when Event B starts
+    // 5: Event A starts when Event B ends
+    // 6: Event A ends when Event B ends
+    // 7: Event A ends when Event B starts
+    //
+    // NEGATIVE:
+    // 1: Event A starts before Event B starts and ends after Event B starts
+
+    #[test]
+    fn case_1() {
+        let mut calendar = Calendar::new();
+        calendar
+            .push(
+                Event::new()
+                    .starts::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T10:00:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .ends::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T12:00:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .done(),
+            )
+            .push(
+                Event::new()
+                    .starts::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T11:00:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .ends::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T13:00:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .done(),
+            );
+
+        merge_all_overlapping_events(&mut calendar);
+        assert_eq!(calendar.components.len(), 1);
+    }
+
+    #[test]
+    fn case_2() {
+        let mut calendar = Calendar::new();
+        calendar
+            .push(
+                Event::new()
+                    .starts::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T11:00:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .ends::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T13:00:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .done(),
+            )
+            .push(
+                Event::new()
+                    .starts::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T10:00:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .ends::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T12:00:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .done(),
+            );
+
+        merge_all_overlapping_events(&mut calendar);
+        assert_eq!(calendar.components.len(), 1);
+    }
+
+    #[test]
+    fn case_3() {
+        let mut calendar = Calendar::new();
+        calendar
+            .push(
+                Event::new()
+                    .starts::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T11:00:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .ends::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T12:00:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .done(),
+            )
+            .push(
+                Event::new()
+                    .starts::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T10:00:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .ends::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T13:00:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .done(),
+            );
+
+        merge_all_overlapping_events(&mut calendar);
+        assert_eq!(calendar.components.len(), 1);
+    }
+
+    #[test]
+    fn case_4() {
+        let mut calendar = Calendar::new();
+        calendar
+            .push(
+                Event::new()
+                    .starts::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T10:00:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .ends::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T11:00:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .done(),
+            )
+            .push(
+                Event::new()
+                    .starts::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T10:00:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .ends::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T12:00:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .done(),
+            );
+
+        merge_all_overlapping_events(&mut calendar);
+        assert_eq!(calendar.components.len(), 1);
+    }
+
+    #[test]
+    fn case_5() {
+        let mut calendar = Calendar::new();
+        calendar
+            .push(
+                Event::new()
+                    .starts::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T11:00:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .ends::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T12:00:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .done(),
+            )
+            .push(
+                Event::new()
+                    .starts::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T10:00:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .ends::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T11:00:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .done(),
+            );
+
+        merge_all_overlapping_events(&mut calendar);
+        assert_eq!(calendar.components.len(), 1);
+    }
+
+    #[test]
+    fn case_6() {
+        let mut calendar = Calendar::new();
+        calendar
+            .push(
+                Event::new()
+                    .starts::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T10:00:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .ends::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T12:00:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .done(),
+            )
+            .push(
+                Event::new()
+                    .starts::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T11:00:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .ends::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T12:00:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .done(),
+            );
+
+        merge_all_overlapping_events(&mut calendar);
+        assert_eq!(calendar.components.len(), 1);
+    }
+
+    #[test]
+    fn custom_1() {
+        let mut calendar = Calendar::new();
+        calendar
+            .push(
+                Event::new()
+                    .starts::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T10:00:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .ends::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T14:00:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .done(),
+            )
+            .push(
+                Event::new()
+                    .starts::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T11:00:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .ends::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T12:00:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .done(),
+            )
+            .push(
+                Event::new()
+                    .starts::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T14:00:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .ends::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T18:00:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .done(),
+            )
+            .push(
+                Event::new()
+                    .starts::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T15:00:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .ends::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T16:00:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .done(),
+            );
+
+        assert_eq!(calendar.components.len(), 4);
+        merge_all_overlapping_events(&mut calendar);
+        assert_eq!(calendar.components.len(), 1);
+    }
+    #[test]
+    fn custom_2() {
+        let mut calendar = Calendar::new();
+        calendar
+            .push(
+                Event::new()
+                    .starts::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T10:00:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .ends::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T14:00:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .done(),
+            )
+            .push(
+                Event::new()
+                    .starts::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T14:02:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .ends::<DateTime<Utc>>(
+                        DateTime::parse_from_rfc3339("2024-01-01T16:00:00+02:00")
+                            .unwrap()
+                            .into(),
+                    )
+                    .done(),
+            );
+
+        merge_all_overlapping_events(&mut calendar);
+        assert_eq!(calendar.components.len(), 1);
     }
 }

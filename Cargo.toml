@@ -19,6 +19,8 @@ axum = "0.7.3"
 cached = { version = "0.47.0", features = ["async"] }
 chrono = "0.4.31"
 chrono-tz = "0.8.5"
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 
 [[bin]]
 name = "cli"

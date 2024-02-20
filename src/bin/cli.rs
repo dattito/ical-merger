@@ -1,5 +1,5 @@
 use ical_merger::lib::{
-    calendar::{hide_details, urls_to_merged_calendar},
+    calendar::{hide_details, merge_all_overlapping_events, urls_to_merged_calendar},
     config::Config,
     error::Result,
 };
@@ -14,6 +14,7 @@ async fn main() -> Result<()> {
 
     if config.hide_details {
         calendar = hide_details(calendar);
+        merge_all_overlapping_events(&mut calendar)
     }
 
     println!("{calendar}");
