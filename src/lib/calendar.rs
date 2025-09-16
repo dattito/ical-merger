@@ -28,7 +28,7 @@ async fn url_to_components(url: String) -> Result<Vec<CalendarComponent>> {
     Ok(text_to_calender(text)?.components)
 }
 
-pub async fn urls_to_merged_calendar(urls: Vec<String>, offsets: &Vec<i64>) -> Result<Calendar> {
+pub async fn urls_to_merged_calendar(urls: Vec<String>, offsets: &[i64]) -> Result<Calendar> {
     let calendars = urls.into_iter().enumerate().map(|(index, url)| async move {
         let components = url_to_components(url).await?;
 
@@ -129,7 +129,7 @@ pub fn shift_timezone(components: Vec<CalendarComponent>, offset: i64) -> Calend
 
 fn shift_date_pehaps_time(dpt: DatePerhapsTime, offset: i64) -> DatePerhapsTime {
     if offset == 0 {
-        return dpt
+        return dpt;
     }
 
     match dpt {
