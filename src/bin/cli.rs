@@ -6,7 +6,7 @@ use ical_merger::lib::{
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
-    dotenvy::dotenv().wrap_err("cannot load .env file")?;
+    dotenvy::dotenv().ok();
     let config = envy::from_env::<Config>().wrap_err("cannot get config from env")?;
 
     let mut calendar = urls_to_merged_calendar(config.urls, &config.tz_offsets).await?;

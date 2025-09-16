@@ -1,8 +1,8 @@
 use futures::stream::FuturesOrdered;
 use futures::StreamExt;
-use icalendar::{parser::read_calendar, Calendar, CalendarComponent, Component, Event, EventLike};
+use icalendar::{parser::read_calendar, Calendar, CalendarComponent, Component, Event, EventLike, DatePerhapsTime, CalendarDateTime};
 use uuid::Uuid;
-use chrono::Local;
+use chrono::{Local, NaiveDateTime, Weekday, Datelike};
 
 use crate::lib::error::{Error, Result};
 use crate::lib::timezone::shift_timezone;
@@ -94,66 +94,207 @@ pub async fn calendars_to_merged_calendar(calendars: Vec<Calendar>) -> Calendar 
 }
 
 pub fn hide_details(calendar: Calendar) -> Calendar {
-    calendar
-        .components
-        .into_iter()
-        .map(|component| {
-            if let Some(event) = component.as_event() {
-                let mut new_event = Event::new();
+    let mut all_event_slots = Vec::new();
+    let mut non_events = Vec::new();
 
-                // Always preserve UID - generate one if missing
-                if let Some(uid) = event.get_uid() {
-                    new_event.uid(uid);
-                } else {
-                    // Generate a fallback UID for events without one
-                    new_event.uid(&format!("generated-uid-{}", Uuid::new_v4()));
+    // Define the 14-day window for recurring event expansion
+    let window_start = Local::now().naive_local();
+    let window_end = window_start + chrono::Duration::days(14);
+
+    // Process all events and expand recurring ones
+    for component in calendar.components {
+        if let Some(event) = component.as_event() {
+            // Only process events that have both start and end times
+            if let (Some(start), Some(end)) = (event.get_start(), event.get_end()) {
+                if let (Some(start_dt), Some(end_dt)) = (extract_naive_datetime(&start), extract_naive_datetime(&end)) {
+                    let uid = event.get_uid().map(|s| s.to_string()).unwrap_or_else(|| format!("generated-uid-{}", Uuid::new_v4()));
+
+                    // Check if this is a recurring event
+                    if let Some(rrule) = event.property_value("RRULE") {
+                        // Expand recurring event into individual occurrences
+                        let expanded_occurrences = expand_recurring_event(
+                            start_dt,
+                            end_dt,
+                            rrule,
+                            window_start,
+                            window_end,
+                        );
+                        all_event_slots.extend(expanded_occurrences);
+                    } else {
+                        // For single events, add directly
+                        all_event_slots.push(EventTimeSlot {
+                            start: start_dt,
+                            end: end_dt,
+                            uid,
+                        });
+                    }
                 }
-
-                // Preserve start time if available
-                if let Some(start) = event.get_start() {
-                    new_event.starts(start);
-                }
-
-                // Preserve end time if available
-                if let Some(end) = event.get_end() {
-                    new_event.ends(end);
-                }
-
-                // Preserve status if available
-                if let Some(status) = event.get_status() {
-                    new_event.status(status);
-                }
-
-                // Preserve recurrence rules
-                if let Some(rrule) = event.property_value("RRULE") {
-                    new_event.add_property("RRULE", rrule);
-                }
-
-                // Preserve other important properties that might be needed
-                if let Some(created) = event.get_timestamp() {
-                    new_event.timestamp(created);
-                }
-
-                // Set summary based on status
-                new_event.summary(match event.get_status() {
-                    Some(status) => match status {
-                        icalendar::EventStatus::Confirmed => "Blocked",
-                        icalendar::EventStatus::Tentative => "Tentative",
-                        icalendar::EventStatus::Cancelled => "Cancelled",
-                    },
-                    None => "Blocked",
-                });
-
-                CalendarComponent::Event(new_event.done())
-            } else {
-                // Preserve non-event components (VTIMEZONE, VTODO, etc.)
-                component
             }
-        })
-        .collect::<Calendar>()
+        } else {
+            // Keep non-event components (VTIMEZONE, etc.)
+            non_events.push(component);
+        }
+    }
+
+    // Merge ALL overlapping events (both single and expanded recurring)
+    let merged_events = merge_overlapping_events(all_event_slots);
+
+    // Create new calendar with merged events
+    let mut calendar_components = non_events;
+
+    for event_slot in merged_events {
+        let mut new_event = Event::new();
+
+        new_event.uid(&event_slot.uid);
+        new_event.starts(DatePerhapsTime::DateTime(CalendarDateTime::Floating(event_slot.start)));
+        new_event.ends(DatePerhapsTime::DateTime(CalendarDateTime::Floating(event_slot.end)));
+        new_event.summary("Blocked");
+        new_event.status(icalendar::EventStatus::Confirmed);
+
+        calendar_components.push(CalendarComponent::Event(new_event.done()));
+    }
+
+    calendar_components.into_iter().collect::<Calendar>()
+}
+
+fn extract_naive_datetime(date_time: &DatePerhapsTime) -> Option<NaiveDateTime> {
+    match date_time {
+        DatePerhapsTime::DateTime(calendar_dt) => {
+            match calendar_dt {
+                CalendarDateTime::Floating(naive_dt) => Some(*naive_dt),
+                CalendarDateTime::Utc(utc_dt) => Some(utc_dt.naive_local()),
+                CalendarDateTime::WithTimezone { date_time, .. } => Some(*date_time),
+            }
+        },
+        DatePerhapsTime::Date(date) => {
+            // Convert date to datetime at start of day
+            Some(date.and_hms_opt(0, 0, 0)?)
+        },
+    }
+}
+
+#[derive(Debug, Clone)]
+struct EventTimeSlot {
+    start: NaiveDateTime,
+    end: NaiveDateTime,
+    uid: String,
+}
+
+fn parse_weekday(day_str: &str) -> Option<Weekday> {
+    match day_str {
+        "MO" => Some(Weekday::Mon),
+        "TU" => Some(Weekday::Tue),
+        "WE" => Some(Weekday::Wed),
+        "TH" => Some(Weekday::Thu),
+        "FR" => Some(Weekday::Fri),
+        "SA" => Some(Weekday::Sat),
+        "SU" => Some(Weekday::Sun),
+        _ => None,
+    }
+}
+
+fn expand_recurring_event(
+    start_dt: NaiveDateTime,
+    end_dt: NaiveDateTime,
+    rrule: &str,
+    window_start: NaiveDateTime,
+    window_end: NaiveDateTime,
+) -> Vec<EventTimeSlot> {
+    let mut occurrences = Vec::new();
+
+    // Parse RRULE - simple implementation for WEEKLY events
+    if !rrule.contains("FREQ=WEEKLY") {
+        // For non-weekly events, just return the original if it's in the window
+        if start_dt >= window_start && start_dt <= window_end {
+            occurrences.push(EventTimeSlot {
+                start: start_dt,
+                end: end_dt,
+                uid: format!("expanded-{}", Uuid::new_v4()),
+            });
+        }
+        return occurrences;
+    }
+
+    // Parse BYDAY parameter
+    let weekdays: Vec<Weekday> = if let Some(byday_part) = rrule.split(';').find(|part| part.starts_with("BYDAY=")) {
+        byday_part
+            .strip_prefix("BYDAY=")
+            .unwrap_or("")
+            .split(',')
+            .filter_map(parse_weekday)
+            .collect()
+    } else {
+        // If no BYDAY specified, use the original event's weekday
+        vec![start_dt.weekday()]
+    };
+
+    // Generate occurrences for each weekday in the window
+    for target_weekday in weekdays {
+        let mut current_date = window_start.date();
+
+        // Find the first occurrence of target_weekday on or after window_start
+        while current_date.weekday() != target_weekday {
+            current_date = current_date.succ_opt().unwrap_or(current_date);
+            if current_date > window_end.date() {
+                break;
+            }
+        }
+
+        // Generate weekly occurrences
+        while current_date <= window_end.date() {
+            let occurrence_start = current_date.and_time(start_dt.time());
+            let occurrence_end = current_date.and_time(end_dt.time());
+
+            if occurrence_start >= window_start && occurrence_start <= window_end {
+                occurrences.push(EventTimeSlot {
+                    start: occurrence_start,
+                    end: occurrence_end,
+                    uid: format!("expanded-{}", Uuid::new_v4()),
+                });
+            }
+
+            // Move to next week
+            current_date += chrono::Duration::weeks(1);
+        }
+    }
+
+    occurrences
+}
+
+fn merge_overlapping_events(events: Vec<EventTimeSlot>) -> Vec<EventTimeSlot> {
+    if events.is_empty() {
+        return events;
+    }
+
+    // Sort events by start time
+    let mut sorted_events = events;
+    sorted_events.sort_by_key(|e| e.start);
+
+    let mut merged = Vec::new();
+    let mut current = sorted_events[0].clone();
+
+    for event in sorted_events.into_iter().skip(1) {
+        // Check for overlap: current event hasn't ended when next event starts
+        if current.end >= event.start {
+            // Overlap detected - merge them
+            // Take the earliest start and latest end
+            current.start = current.start.min(event.start);
+            current.end = current.end.max(event.end);
+            // Keep the first UID for the merged event
+        } else {
+            // No overlap - save current and move to next
+            merged.push(current);
+            current = event;
+        }
+    }
+
+    // Don't forget the last event
+    merged.push(current);
+    merged
 }
 
 pub fn filter_future_days(calendar: Calendar, days_limit: u32) -> Calendar {
+    let hide_details_mode = std::env::var("HIDE_DETAILS").unwrap_or_default().to_lowercase() == "true";
     let today = Local::now().date_naive();
     let end_date = today + chrono::Duration::days(days_limit as i64);
 
@@ -181,7 +322,14 @@ pub fn filter_future_days(calendar: Calendar, days_limit: u32) -> Calendar {
                             // For recurring events, only include if:
                             // 1. They start within our future window, OR
                             // 2. They started recently enough to have current/future occurrences
-                            let max_past_days = 90; // Only look back 90 days for recurring events
+                            let max_past_days = if hide_details_mode {
+                                // In privacy mode, be more restrictive - only look back 1 day
+                                // to avoid "mysterious" events from distant past
+                                1
+                            } else {
+                                // Normal mode - look back 90 days for recurring events
+                                90
+                            };
                             if event_date >= today - chrono::Duration::days(max_past_days) && event_date <= end_date {
                                 // Create a new event with truncated RRULE
                                 let mut new_event = Event::new();
