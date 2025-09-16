@@ -15,6 +15,9 @@ pub struct Config {
 
     #[serde(default = "default_hide_details")]
     pub hide_details: bool,
+
+    #[serde(default = "default_future_days_limit")]
+    pub future_days_limit: Option<u32>,
 }
 
 fn default_port() -> u32 {
@@ -31,4 +34,8 @@ fn default_hide_details() -> bool {
 
 fn default_tz_offsets() -> Vec<i64> {
     Vec::new()
+}
+
+fn default_future_days_limit() -> Option<u32> {
+    None
 }

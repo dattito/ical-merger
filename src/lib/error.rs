@@ -15,6 +15,9 @@ pub enum Error {
 
     #[error("cannot bind tcp port: {0}")]
     IO(#[from] std::io::Error),
+
+    #[error("{0}")]
+    Eyre(#[from] eyre::Report),
 }
 
 impl IntoResponse for Error {

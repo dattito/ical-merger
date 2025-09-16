@@ -19,6 +19,9 @@ axum = "0.8"
 cached = { version = "0.56", features = ["async"] }
 chrono = "0.4"
 chrono-tz = "0.10"
+eyre = "0.6.12"
+dotenvy = "0.15.7"
+uuid = { version = "1.0", features = ["v4"] }
 
 [[bin]]
 name = "cli"
