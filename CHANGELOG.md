@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.3.0](https://github.com/dattito/ical-merger/compare/v1.2.1...v1.3.0) (2025-09-16)
+
+
+### Features
+
+* add reccurance to events when hiding details ([b20c6a5](https://github.com/dattito/ical-merger/commit/b20c6a51aeb0b0fb5df28d165badc38a3d959c6e))
+* add timezones and future days limit ([7b159c7](https://github.com/dattito/ical-merger/commit/7b159c7422b0a0a3fb99d3be6859bc2ccfbafb6f))
+* add tracing ([92cff65](https://github.com/dattito/ical-merger/commit/92cff655e74604366523f63a9d39d3352f7bdab2))
+* bump rust to 1.76.0 ([379a35b](https://github.com/dattito/ical-merger/commit/379a35b0be54d42d908767571fce5af33fa461b6))
+
+
+### Bug Fixes
+
+* dockerfile ([13ed949](https://github.com/dattito/ical-merger/commit/13ed9493e3e150214f633084d13699199a3d760c))
+
 ## [1.3.0](https://github.com/dattito/ical-merger/compare/v1.2.1...v1.3.0) (2024-01-17)
 
 
