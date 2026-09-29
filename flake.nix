@@ -44,6 +44,7 @@
             version = packageVersion;
             inherit src;
             strictDeps = true;
+            SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
           };
           cargoArtifacts = craneLib.buildDepsOnly commonArgs;
           app = craneLib.buildPackage (
@@ -103,6 +104,7 @@
             version = packageVersion;
             inherit src;
             strictDeps = true;
+            SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
           };
           cargoArtifacts = craneLib.buildDepsOnly commonArgs;
           app = craneLib.buildPackage (

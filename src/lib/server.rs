@@ -58,7 +58,7 @@ impl AppState {
             .redirect(reqwest::redirect::Policy::limited(5))
             .user_agent(concat!("ical-merger/", env!("CARGO_PKG_VERSION")))
             .build()
-            .map_err(|_| ServerError::Client)?;
+            .map_err(ServerError::Client)?;
         let sources = config
             .sources
             .iter()
@@ -127,8 +127,8 @@ async fn fetch_source(client: &reqwest::Client, url: &url::Url) -> Result<String
 
 #[derive(Debug, thiserror::Error)]
 pub enum ServerError {
-    #[error("could not configure HTTP client")]
-    Client,
+    #[error("could not configure HTTP client: {0}")]
+    Client(#[source] reqwest::Error),
     #[error("could not bind HTTP listener: {0}")]
     Bind(#[from] std::io::Error),
     #[error("HTTP server failed: {0}")]
