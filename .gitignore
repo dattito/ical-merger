@@ -1,4 +1,3 @@
 /target
 .DS_STORE
-*.ics
 .env

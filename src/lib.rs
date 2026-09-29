@@ -1,7 +1,6 @@
-pub mod lib {
-    pub mod calendar;
-    pub mod config;
-    pub mod error;
-    pub mod server;
-    pub mod timezone;
-}
+#[path = "lib/calendar.rs"]
+pub mod calendar;
+#[path = "lib/config.rs"]
+pub mod config;
+#[path = "lib/server.rs"]
+pub mod server;

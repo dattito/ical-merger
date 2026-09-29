@@ -1,19 +1,70 @@
 # ical-merger
 
-## Introduction
+`ical-merger` reads calendar subscription URLs and serves one combined iCalendar feed. By default it hides event details and publishes merged `Busy` blocks, so gaps in the feed show availability.
 
-The purpose of `ical-merger` is to take a list of calendar urls (in the `ical`-format) and return a single, merged calendar, accessible via the HTTP endpoint.
+The server accepts HTTP and HTTPS calendar URLs. It understands VEVENT and VFREEBUSY components, recurring events, recurrence exceptions, IANA timezone IDs, common Outlook timezone names, and embedded VTIMEZONE rules. Times are resolved to UTC before calendars are combined.
 
-In the future, it should be able to be configurable, to e.g. hide the details of the events.
+## Configuration
 
-## Usage
+Set exactly one of `ICAL_MERGER_CONFIG` (TOML text) or `ICAL_MERGER_CONFIG_FILE` (path to a TOML file). A default IANA timezone is required for floating times; source entries can override it.
 
-To use it, there is a pre-built Docker image at `ghcr.io/dattito/ical-merger`.
+```toml
+listen = "0.0.0.0:3000"
+default_timezone = "Europe/Berlin"
+horizon_days = 90
+refresh_seconds = 900
+output = "busy" # busy or title
 
-It is configurable via these environment variables:
+[[sources]]
+url = "https://calendar.example.net/personal.ics"
 
-- `URLS`: A comma seperated list of the urls where the `ìcal`-calendars can be found (**REQUIRED**)
-- `PORT`: The port on which the server is listening (default: `3000`)
-- `HOST`: The host on which the server is listening (default: `0.0.0.0`)
-- `HIDE_DETAILS`: Only start, end, uid and status of the events get published (default: `true`)
-- `TZ_OFFSETS`: A comma seperated list of timezone offsets for the calendars. A list of integers, representing the hours. If the length is smaller then the lengh of the `URLS`, then the last value of the array ist used for the `URLS` at the end of the list (default: \[0\])
+[[sources]]
+url = "https://calendar.example.net/work.ics"
+timezone = "America/New_York"
+```
+
+The server rejects missing or ambiguous configuration, malformed TOML, an invalid listen socket, empty source lists, non-HTTP URLs, invalid IANA zones, and nonpositive horizon or refresh values. Validation errors name the configuration field and omit URL credentials. Defaults are `listen = "0.0.0.0:3000"`, `horizon_days = 90`, `refresh_seconds = 900`, and `output = "busy"`.
+
+The feed window starts at midnight in `default_timezone` and ends at midnight after the configured number of days. Each successful source response is cached for `refresh_seconds`. Failed sources are omitted from that request; a successful response includes `X-Ical-Merger-Partial`, `X-Ical-Merger-Skipped-Sources`, and `X-Ical-Merger-Skipped-Events` headers. If no source is usable, the feed endpoint returns 503. Source URLs and credentials are not written to logs or copied to the output.
+
+Busy mode merges overlapping and adjacent occupied intervals. Title mode keeps events separate and publishes only titles; events marked PRIVATE or CONFIDENTIAL still appear as `Busy`. Both modes omit cancelled, tentative, transparent, and provider-marked-free events. All-day DTEND values are exclusive. The server caps each downloaded calendar at 10 MiB and bounds recurrence expansion; an event that cannot be interpreted or expanded safely is skipped and counted.
+
+Period-valued RDATE entries and `RECURRENCE-ID;RANGE=THISANDFUTURE` series are skipped and counted. Embedded custom timezone transition rules are resolved for local dates from 1970 through 2050; an event outside that range is skipped rather than assigned a guessed offset.
+
+## Run locally
+
+With Nix installed:
+
+```sh
+nix develop
+ICAL_MERGER_CONFIG_FILE=./config.toml cargo run --locked
+```
+
+The server exposes the calendar at `/` and a liveness check at `/healthz`. The calendar response uses `text/calendar; charset=utf-8`.
+
+To run all checks in the pinned Nix environment:
+
+```sh
+nix flake check
+```
+
+To build and load the Docker-compatible image:
+
+```sh
+nix build .#dockerImage
+docker load --input result
+docker run --rm -p 3000:3000 \
+  -e ICAL_MERGER_CONFIG_FILE=/etc/ical-merger/config.toml \
+  -v "$PWD/config.toml:/etc/ical-merger/config.toml:ro" \
+  ical-merger:latest
+```
+
+## Kubernetes
+
+The example in [`deploy/kubernetes/ical-merger.yaml`](deploy/kubernetes/ical-merger.yaml) mounts TOML configuration from a ConfigMap. Changes to the mounted configuration require a pod restart. Put the configuration in a Kubernetes Secret if any subscription URL contains a credential or private token.
+
+The generated feed is public and has no built-in authentication. Restrict access at the ingress or network layer when needed. `output = "title"` applies to the whole server and reveals event titles except for private or confidential events.
+
+## Development and releases
+
+The Nix flake pins Nixpkgs, Crane, Cargo dependencies, development tools, and the Docker image build. `nix flake check` runs formatting, Clippy, tests, and a package build. GitHub Actions builds and smoke-tests native amd64 and arm64 images; version tags publish a multi-architecture image to `ghcr.io/dattito/ical-merger`.
