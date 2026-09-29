@@ -140,6 +140,25 @@
               cargoTestExtraArgs = "--all-targets";
             }
           );
+          helmChart =
+            pkgs.runCommand "ical-merger-helm-chart"
+              {
+                nativeBuildInputs = [ pkgs.kubernetes-helm ];
+              }
+              ''
+                helm lint ${./charts/ical-merger} --values ${./charts/ical-merger}/ci/values.yaml
+                helm template availability ${./charts/ical-merger} --values ${./charts/ical-merger}/ci/values.yaml > rendered.yaml
+                test -s rendered.yaml
+                grep -q 'output = "title"' rendered.yaml
+                grep -q 'url = "https://calendar.example.test/work.ics"' rendered.yaml
+                helm template availability-secret ${./charts/ical-merger} \
+                  --set config.existingConfigSecret=ical-merger-input > secret-rendered.yaml
+                grep -q 'secretName: ical-merger-input' secret-rendered.yaml
+                if grep -q 'kind: ConfigMap' secret-rendered.yaml; then
+                  exit 1
+                fi
+                touch $out
+              '';
           package = app;
         }
       );
@@ -154,6 +173,7 @@
             packages = with pkgs; [
               cargo
               clippy
+              kubernetes-helm
               nixfmt
               rustc
               rustfmt

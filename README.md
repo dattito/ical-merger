@@ -63,6 +63,8 @@ docker run --rm -p 3000:3000 \
 
 The example in [`deploy/kubernetes/ical-merger.yaml`](deploy/kubernetes/ical-merger.yaml) mounts TOML configuration from a ConfigMap. Changes to the mounted configuration require a pod restart. Put the configuration in a Kubernetes Secret if any subscription URL contains a credential or private token.
 
+The Helm chart in [`charts/ical-merger`](charts/ical-merger) exposes source URLs, timezones, feed mode, horizon, refresh interval, and listener address in its values. Set `config.existingConfigSecret` to mount a complete TOML configuration from a Secret when the source URLs contain credentials. The chart's ConfigMap checksum triggers a rollout after values change.
+
 The generated feed is public and has no built-in authentication. Restrict access at the ingress or network layer when needed. `output = "title"` applies to the whole server and reveals event titles except for private or confidential events.
 
 ## Development and releases

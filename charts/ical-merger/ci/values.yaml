@@ -1,0 +1,19 @@
+config:
+  listen: "0.0.0.0:3000"
+  defaultTimezone: UTC
+  horizonDays: 30
+  refreshSeconds: 120
+  output: title
+  sources:
+    - url: https://calendar.example.test/personal.ics
+    - url: https://calendar.example.test/work.ics
+      timezone: America/New_York
+
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: availability.example.test
+      paths:
+        - path: /
+          pathType: Prefix

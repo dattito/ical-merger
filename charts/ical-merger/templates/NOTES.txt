@@ -1,0 +1,9 @@
+ical-merger is serving the iCalendar feed at the Service root path (/).
+
+The default chart creates a ConfigMap from config.sources. If any source URL
+contains credentials, put the complete TOML configuration in a Kubernetes
+Secret and set config.existingConfigSecret to that Secret's name. The Secret
+must contain a config.toml key.
+
+The generated feed is public. Configure access protection at the ingress or
+network layer when needed.

@@ -1,0 +1,11 @@
+{{- if not .Values.config.existingConfigSecret }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ical-merger.fullname" . }}-config
+  labels:
+    {{- include "ical-merger.labels" . | nindent 4 }}
+data:
+  config.toml: |-
+{{ include "ical-merger.config" . | indent 4 }}
+{{- end }}

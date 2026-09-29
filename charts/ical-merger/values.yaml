@@ -1,0 +1,67 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/dattito/ical-merger
+  pullPolicy: IfNotPresent
+  tag: "2.0.0"
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+config:
+  listen: "0.0.0.0:3000"
+  defaultTimezone: Europe/Berlin
+  horizonDays: 90
+  refreshSeconds: 900
+  output: busy
+  # Set to a Secret containing the complete config.toml to avoid putting
+  # credential-bearing source URLs in Helm values or a ConfigMap.
+  existingConfigSecret: ""
+  sources:
+    - url: https://calendar.example.net/personal.ics
+    # - url: https://calendar.example.net/work.ics
+    #   timezone: America/New_York
+
+service:
+  type: ClusterIP
+  port: 80
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: calendar.example.net
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    memory: 256Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
