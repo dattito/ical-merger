@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.0.0](https://github.com/dattito/ical-merger/compare/v1.4.0...v2.0.0) (2026-09-29)
+
+
+### ⚠ BREAKING CHANGES
+
+* Configuration now uses ICAL_MERGER_CONFIG or ICAL_MERGER_CONFIG_FILE; legacy environment variables and the CLI are removed.
+
+### Features
+
+* rewrite privacy-focused calendar feed ([35c80fc](https://github.com/dattito/ical-merger/commit/35c80fc49a35af694f77857772c836943b95c23d))
+
+
+### Bug Fixes
+
+* provide CA roots to Nix tests ([420f802](https://github.com/dattito/ical-merger/commit/420f8023c1f8e29ba2236a86de3292ac5ab3680e))
+
 ## [1.3.0](https://github.com/dattito/ical-merger/compare/v1.2.1...v1.3.0) (2025-09-16)
 
 
