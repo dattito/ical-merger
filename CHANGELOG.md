@@ -2,6 +2,13 @@
 
 ## [2.1.0](https://github.com/dattito/ical-merger/compare/v2.0.0...v2.1.0) (2026-10-18)
 
+
+### Features
+
+* add per-source Outlook busy status filtering ([89f94ff](https://github.com/dattito/ical-merger/commit/89f94ffb7a56be53691717fee56fea106555fce0))
+
+## [2.1.0](https://github.com/dattito/ical-merger/compare/v2.0.0...v2.1.0) (2026-10-18)
+
 ### Features
 
 * Add an optional per-source Outlook busy-status allowlist, applied after recurrence overrides and before merging intervals.
