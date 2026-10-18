@@ -149,6 +149,7 @@
                 helm lint ${./charts/ical-merger} --values ${./charts/ical-merger}/ci/values.yaml
                 helm template availability ${./charts/ical-merger} --values ${./charts/ical-merger}/ci/values.yaml > rendered.yaml
                 test -s rendered.yaml
+                grep -Fq 'outlook_busy_statuses = ["BUSY"]' rendered.yaml
                 grep -q 'output = "title"' rendered.yaml
                 grep -q 'url = "https://calendar.example.test/work.ics"' rendered.yaml
                 helm template availability-secret ${./charts/ical-merger} \

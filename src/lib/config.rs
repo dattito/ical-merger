@@ -16,6 +16,7 @@ pub enum OutputMode {
 pub struct SourceConfig {
     pub url: Url,
     pub timezone: Option<Tz>,
+    pub outlook_busy_statuses: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug)]
@@ -68,6 +69,7 @@ struct RawConfig {
 struct RawSource {
     url: String,
     timezone: Option<String>,
+    outlook_busy_statuses: Option<Vec<String>>,
 }
 
 fn default_listen() -> String {
@@ -183,7 +185,12 @@ impl Config {
                         })
                     })
                     .transpose()?;
-                Ok(SourceConfig { url, timezone })
+                if let Some(statuses) = &source.outlook_busy_statuses {
+                    if statuses.is_empty() || statuses.iter().any(|status| !matches!(status.as_str(), "BUSY" | "BUSY-UNAVAILABLE" | "OOF" | "WORKINGELSEWHERE")) {
+                        return Err(ConfigError::invalid(format!("sources[{index}].outlook_busy_statuses"), "must be a nonempty list of BUSY, BUSY-UNAVAILABLE, OOF, or WORKINGELSEWHERE"));
+                    }
+                }
+                Ok(SourceConfig { url, timezone, outlook_busy_statuses: source.outlook_busy_statuses })
             })
             .collect::<Result<Vec<_>, ConfigError>>()?;
 
@@ -216,6 +223,25 @@ default_timezone = "Europe/Berlin"
 [[sources]]
 url = "https://calendar.example/calendar.ics"
 "#;
+
+    #[test]
+    fn outlook_status_allowlist_is_optional_and_validated() {
+        assert!(Config::parse(VALID).unwrap().sources[0]
+            .outlook_busy_statuses
+            .is_none());
+        let config =
+            Config::parse(&format!("{VALID}\noutlook_busy_statuses = [\"BUSY\"]")).unwrap();
+        assert_eq!(
+            config.sources[0].outlook_busy_statuses.as_deref(),
+            Some(["BUSY".to_owned()].as_slice())
+        );
+        for statuses in ["[]", "[\"TYPO\"]", "[\"busy\"]"] {
+            let error = Config::parse(&format!("{VALID}\noutlook_busy_statuses = {statuses}"))
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains("sources[0].outlook_busy_statuses"));
+        }
+    }
 
     #[test]
     fn parses_defaults_and_timezone_override() {

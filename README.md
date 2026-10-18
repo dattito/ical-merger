@@ -25,6 +25,16 @@ timezone = "America/New_York"
 
 The server rejects missing or ambiguous configuration, malformed TOML, an invalid listen socket, empty source lists, non-HTTP URLs, invalid IANA zones, and nonpositive horizon or refresh values. Validation errors name the configuration field and omit URL credentials. Defaults are `listen = "0.0.0.0:3000"`, `horizon_days = 90`, `refresh_seconds = 900`, and `output = "busy"`.
 
+For an Outlook source that should contribute only explicitly booked events, set a source-specific allowlist:
+
+```toml
+[[sources]]
+url = "https://calendar.example.net/outlook.ics"
+outlook_busy_statuses = ["BUSY"]
+```
+
+`outlook_busy_statuses` is an optional, nonempty list of `BUSY`, `BUSY-UNAVAILABLE`, `OOF`, or `WORKINGELSEWHERE`. It additionally filters the effective `X-MICROSOFT-CDO-BUSYSTATUS` after recurring event overrides are applied. Missing status fields and VFREEBUSY components are excluded when the allowlist is set. Cancelled, tentative, free, and transparent events remain excluded. Without this option, existing behavior is unchanged; other sources are unaffected. Filtering happens before occupied intervals are merged.
+
 The feed window starts at midnight in `default_timezone` and ends at midnight after the configured number of days. Each successful source response is cached for `refresh_seconds`. Failed sources are omitted from that request; a successful response includes `X-Ical-Merger-Partial`, `X-Ical-Merger-Skipped-Sources`, and `X-Ical-Merger-Skipped-Events` headers. If no source is usable, the feed endpoint returns 503. Source URLs and credentials are not written to logs or copied to the output.
 
 Busy mode merges overlapping and adjacent occupied intervals. Title mode keeps events separate and publishes only titles; events marked PRIVATE or CONFIDENTIAL still appear as `Busy`. Both modes omit cancelled, tentative, transparent, and provider-marked-free events. All-day DTEND values are exclusive. The server caps each downloaded calendar at 10 MiB and bounds recurrence expansion; an event that cannot be interpreted or expanded safely is skipped and counted.

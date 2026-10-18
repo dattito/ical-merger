@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.0](https://github.com/dattito/ical-merger/compare/v2.0.0...v2.1.0) (2026-10-18)
+
+### Features
+
+* Add an optional per-source Outlook busy-status allowlist, applied after recurrence overrides and before merging intervals.
+* Expose the filter through the Helm chart.
+
 ## [2.0.0](https://github.com/dattito/ical-merger/compare/v1.4.0...v2.0.0) (2026-09-29)
 
 

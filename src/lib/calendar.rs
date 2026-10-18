@@ -31,6 +31,7 @@ pub struct Interval {
 #[derive(Debug, Clone)]
 pub struct ParsedSource {
     events: Vec<CalendarEvent>,
+    outlook_busy_statuses: Option<Vec<String>>,
     freebusy: Vec<Interval>,
     pub skipped_events: usize,
     pub total_events: usize,
@@ -88,6 +89,7 @@ struct Occurrence {
     end: DateTime<Utc>,
     title: String,
     private: bool,
+    microsoft_busy_status: Option<String>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -135,6 +137,11 @@ impl ParsedSource {
                 }
             } else if component.name.eq_ignore_ascii_case("VFREEBUSY") {
                 parsed_event_count += 1;
+                // A strict Outlook filter requires an explicit per-event Microsoft status.
+                // VFREEBUSY periods carry no such status and cannot satisfy it.
+                if source.outlook_busy_statuses.is_some() {
+                    continue;
+                }
                 match parse_freebusy(component, &timezones, floating_timezone) {
                     Ok(mut periods) => freebusy.append(&mut periods),
                     Err(()) => skipped_events += 1,
@@ -148,6 +155,7 @@ impl ParsedSource {
         }
 
         Ok(Self {
+            outlook_busy_statuses: source.outlook_busy_statuses.clone(),
             events,
             freebusy,
             skipped_events,
@@ -736,6 +744,14 @@ fn expand_source(
             *skipped_events += masters.len() - 1;
         }
     }
+    if let Some(statuses) = &source.outlook_busy_statuses {
+        occurrences.retain(|occurrence| {
+            occurrence
+                .microsoft_busy_status
+                .as_ref()
+                .is_some_and(|status| statuses.contains(status))
+        });
+    }
     occurrences
 }
 
@@ -1125,6 +1141,11 @@ fn build_occurrence(
         end: end_utc.min(window.end),
         title,
         private: matches!(class, "PRIVATE" | "CONFIDENTIAL"),
+        microsoft_busy_status: event
+            .microsoft_busy_status
+            .as_ref()
+            .or(master.microsoft_busy_status.as_ref())
+            .cloned(),
     }))
 }
 
@@ -1162,6 +1183,7 @@ mod tests {
         SourceConfig {
             url: url::Url::parse("https://calendar.example.test/feed.ics").unwrap(),
             timezone: None,
+            outlook_busy_statuses: None,
         }
     }
 
@@ -1180,6 +1202,95 @@ mod tests {
         DateTime::parse_from_rfc3339("2026-03-07T00:00:00Z")
             .unwrap()
             .with_timezone(&Utc)
+    }
+
+    #[test]
+    fn strict_outlook_filter_requires_explicit_busy_and_is_source_local() {
+        let mut input = String::from("BEGIN:VCALENDAR\nVERSION:2.0\n");
+        for (index, status) in [
+            Some("BUSY"),
+            Some("OOF"),
+            Some("TENTATIVE"),
+            Some("FREE"),
+            Some("WORKINGELSEWHERE"),
+            Some("BUSY-UNAVAILABLE"),
+            None,
+        ]
+        .iter()
+        .enumerate()
+        {
+            input.push_str(&format!("BEGIN:VEVENT\nUID:event-{index}\nDTSTART:20260307T100000Z\nDTEND:20260307T110000Z\nSUMMARY:event-{index}\n"));
+            if let Some(status) = status {
+                input.push_str(&format!("X-MICROSOFT-CDO-BUSYSTATUS:{status}\n"));
+            }
+            input.push_str("END:VEVENT\n");
+        }
+        input.push_str("BEGIN:VFREEBUSY\nFREEBUSY:20260307T120000Z/20260307T130000Z\nEND:VFREEBUSY\nEND:VCALENDAR\n");
+        let mut strict = source();
+        strict.outlook_busy_statuses = Some(vec!["BUSY".into()]);
+        let parsed = ParsedSource::parse(&input, &strict, chrono_tz::UTC).unwrap();
+        assert!(parsed.freebusy.is_empty());
+        let mut skipped = 0;
+        let expanded = expand_source(
+            &parsed,
+            0,
+            window("2026-03-07T00:00:00Z", "2026-03-08T00:00:00Z"),
+            &mut skipped,
+        );
+        assert_eq!(
+            expanded
+                .iter()
+                .map(|event| event.title.as_str())
+                .collect::<Vec<_>>(),
+            ["event-0"]
+        );
+        assert_eq!(skipped, 0);
+        let unfiltered = ParsedSource::parse(&input, &source(), chrono_tz::UTC).unwrap();
+        assert_eq!(unfiltered.freebusy.len(), 1);
+        assert_eq!(
+            expand_source(
+                &unfiltered,
+                1,
+                window("2026-03-07T00:00:00Z", "2026-03-08T00:00:00Z"),
+                &mut skipped
+            )
+            .len(),
+            5
+        );
+    }
+
+    #[test]
+    fn strict_outlook_filter_uses_effective_recurrence_override_status() {
+        let input = "BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\nUID:series\nDTSTART:20260307T100000Z\nDTEND:20260307T110000Z\nRRULE:FREQ=DAILY;COUNT=3\nX-MICROSOFT-CDO-BUSYSTATUS:OOF\nEND:VEVENT\nBEGIN:VEVENT\nUID:series\nRECURRENCE-ID:20260308T100000Z\nDTSTART:20260308T100000Z\nDTEND:20260308T110000Z\nX-MICROSOFT-CDO-BUSYSTATUS:BUSY\nEND:VEVENT\nEND:VCALENDAR\n";
+        let mut strict = source();
+        strict.outlook_busy_statuses = Some(vec!["BUSY".into()]);
+        for (text, expected) in [
+            (input.to_owned(), vec![8]),
+            (
+                input
+                    .replace("BUSYSTATUS:OOF", "BUSYSTATUS:SWAP")
+                    .replace("BUSYSTATUS:BUSY", "BUSYSTATUS:OOF")
+                    .replace("BUSYSTATUS:SWAP", "BUSYSTATUS:BUSY"),
+                vec![7, 9],
+            ),
+        ] {
+            let parsed = ParsedSource::parse(&text, &strict, chrono_tz::UTC).unwrap();
+            let mut skipped = 0;
+            let events = expand_source(
+                &parsed,
+                0,
+                window("2026-03-07T00:00:00Z", "2026-03-10T00:00:00Z"),
+                &mut skipped,
+            );
+            assert_eq!(
+                events
+                    .iter()
+                    .map(|event| event.start.day())
+                    .collect::<Vec<_>>(),
+                expected
+            );
+            assert_eq!(skipped, 0);
+        }
     }
 
     #[test]
@@ -1302,6 +1413,7 @@ mod tests {
         assert_eq!(merge_intervals(vec![touching, first]).len(), 1);
 
         let empty = ParsedSource {
+            outlook_busy_statuses: None,
             events: Vec::new(),
             freebusy: vec![first, touching],
             skipped_events: 0,

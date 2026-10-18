@@ -23,6 +23,7 @@ config:
     - url: https://calendar.example.net/personal.ics
     - url: https://calendar.example.net/work.ics
       timezone: America/New_York
+      outlookBusyStatuses: [BUSY]
 
 ingress:
   enabled: true

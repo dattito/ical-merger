@@ -37,6 +37,9 @@ output = {{ .Values.config.output | quote }}
 
 [[sources]]
 url = {{ .url | quote }}
+{{- if hasKey . "outlookBusyStatuses" }}
+outlook_busy_statuses = {{ .outlookBusyStatuses | toJson }}
+{{- end }}
 {{- with .timezone }}
 timezone = {{ . | quote }}
 {{- end }}

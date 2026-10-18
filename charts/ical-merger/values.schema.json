@@ -34,7 +34,11 @@
             "required": ["url"],
             "properties": {
               "url": { "type": "string", "pattern": "^https?://[^\\s]+$" },
-              "timezone": { "type": "string" }
+              "timezone": { "type": "string" },
+              "outlookBusyStatuses": {
+                "type": "array", "minItems": 1,
+                "items": { "type": "string", "enum": ["BUSY", "BUSY-UNAVAILABLE", "OOF", "WORKINGELSEWHERE"] }
+              }
             }
           }
         }
